@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日本地図 ピン留めマップ</title>
+    
+    <!-- LeafletのCSSを読み込み -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- UIのスタイリングにTailwind CSSを使用 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* 地図の高さを指定（必須） */
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 0.5rem;
+            z-index: 1; /* Tailwindのヘッダー等と重ならないように調整 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4 md:p-8 font-sans text-gray-800">
+
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-4 text-center text-blue-600">📍 緯度経度 マップピンツール</h1>
+        
+        <p class="text-sm text-gray-600 mb-6 text-center">
+            緯度（Latitude）と経度（Longitude）を入力して「ピンを刺す」ボタンを押してください。<br>
+            ※初期状態では東京駅付近にピンが刺さっています。
+        </p>
+
+        <!-- 入力フォーム -->
+        <div class="flex flex-col md:flex-row gap-4 mb-6 justify-center items-end">
+            <div class="w-full md:w-auto">
+                <label for="lat" class="block text-sm font-medium text-gray-700 mb-1">緯度 (Latitude)</label>
+                <input type="number" id="lat" step="0.000001" placeholder="例: 35.681236" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="w-full md:w-auto">
+                <label for="lng" class="block text-sm font-medium text-gray-700 mb-1">経度 (Longitude)</label>
+                <input type="number" id="lng" step="0.000001" placeholder="例: 139.767125" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="w-full md:w-auto">
+                <button onclick="addPinFromInput()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition duration-200">
+                    ピンを刺す
+                </button>
+            </div>
+        </div>
+
+        <!-- エラーメッセージ表示用領域 -->
+        <div id="error-message" class="text-red-500 text-center text-sm mb-4 hidden">
+            正しい数値を入力してください。
+        </div>
+
+        <!-- 地図を表示するコンテナ -->
+        <div id="map" class="border border-gray-300 shadow-inner"></div>
+        
+        <!-- ピンのリスト表示 -->
+        <div class="mt-6">
+            <h2 class="text-lg font-semibold mb-2 border-b pb-1">追加したピンのリスト</h2>
+            <ul id="pin-list" class="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                <!-- JavaScriptで動的に追加されます -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- LeafletのJavaScriptを読み込み -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script>
+        // 1. 地図の初期化
+        // 最初の視点を日本全体が見える位置（緯度 36.2048, 経度 138.2529）に設定。ズームレベルは 5。
+        const map = L.map('map').setView([36.2048, 138.2529], 5);
+
+        // 2. タイルレイヤーの追加（OpenStreetMapを使用）
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // 保持しているマーカー（ピン）の配列
+        const markers = [];
+
+        // 3. ピンを追加する関数
+        function addPin(lat, lng, popupText) {
+            // マーカーを作成して地図に追加
+            const marker = L.marker([lat, lng]).addTo(map);
+            
+            // ポップアップ（ピンをクリックした時に出る吹き出し）を設定
+            if (popupText) {
+                marker.bindPopup(popupText).openPopup();
+            }
+
+            // マーカーを配列に保存
+            markers.push(marker);
+
+            // 追加したピンを中心に地図を移動し、少しズームする
+            map.flyTo([lat, lng], 10);
+
+            // リストに表示
+            const list = document.getElementById('pin-list');
+            const listItem = document.createElement('li');
+            listItem.textContent = `緯度: ${lat}, 経度: ${lng}`;
+            list.appendChild(listItem);
+        }
+
+        // 4. 入力フォームからピンを追加する処理
+        function addPinFromInput() {
+            const latInput = document.getElementById('lat').value;
+            const lngInput = document.getElementById('lng').value;
+            const errorMsg = document.getElementById('error-message');
+
+            // 入力チェック（空欄でないか、数値として正しいか）
+            if (latInput === "" || lngInput === "" || isNaN(latInput) || isNaN(lngInput)) {
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+
+            // エラーメッセージを隠す
+            errorMsg.classList.add('hidden');
+
+            const lat = parseFloat(latInput);
+            const lng = parseFloat(lngInput);
+
+            // ピンを追加
+            addPin(lat, lng, `追加されたピン<br>緯度: ${lat}<br>経度: ${lng}`);
+            
+            // 入力欄をクリアする
+            document.getElementById('lat').value = '';
+            document.getElementById('lng').value = '';
+        }
+
+        // 初期サンプルのピン（東京駅付近）
+        addPin(35.681236, 139.767125, "東京駅<br>初期ピンです");
+
+    </script>
+</body>
+</html>
